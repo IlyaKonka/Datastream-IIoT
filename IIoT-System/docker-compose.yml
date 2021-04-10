@@ -1,0 +1,124 @@
+version: '2'
+services:
+  flink:
+    build: .
+    container_name: flink_proj_javaAPI
+    depends_on:
+      - influxdb
+      - mosquitto
+      - namenode
+    command: bash -c "cd usr/app && java -jar mainproj.data-1.0-SNAPSHOT.jar ${WAIT_TIME} ${SIMULATION}"
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.2
+  influxdb:
+    container_name: flink_proj_influxdb
+    image: influxdb:1.8.2
+    ports:
+      - '8086:8086'
+    volumes:
+      - influxdb-storage:/var/lib/influxdb
+    environment:
+      - INFLUXDB_ADMIN_USER=${INFLUXDB_USERNAME}
+      - INFLUXDB_ADMIN_PASSWORD=${INFLUXDB_PASSWORD}
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.3
+  chronograf:
+    container_name: flink_proj_chronograf
+    image: chronograf:1.8.6
+    ports:
+      - '127.0.0.1:8888:8888'
+    volumes:
+      - chronograf-storage:/var/lib/chronograf
+    depends_on:
+      - influxdb
+    environment:
+      #     - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_URL=http://172.30.0.3:8086
+      - INFLUXDB_USERNAME=${INFLUXDB_USERNAME}
+      - INFLUXDB_PASSWORD=${INFLUXDB_PASSWORD}
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.4
+  grafana:
+    container_name: flink_proj_grafana
+    image: grafana/grafana:7.0.0
+    user: root
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana-provisioning/:/etc/grafana/provisioning
+    depends_on:
+      - influxdb
+    environment:
+      - GF_PATHS_CONFIG=/etc/grafana/provisioning/userconfig/grafana.ini
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USERNAME}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.5
+  mosquitto:
+    container_name: flink_proj_mosquitto
+    image: eclipse-mosquitto:1.6.9
+    restart: always
+    ports:
+      - "1883:1883"
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.6
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: always
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=proj_hadoop_cluster
+    env_file:
+      - ./hadoop.env
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.7
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode1
+    restart: always
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.8
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode2
+    restart: always
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    networks:
+      static-network:
+        ipv4_address: 172.30.0.9
+volumes:
+  influxdb-storage:
+  chronograf-storage:
+  grafana-storage:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:
+
+networks:
+  static-network:
+    external: 
+      name: flinkprojnetwork
